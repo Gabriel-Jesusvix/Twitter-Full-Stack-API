@@ -7,47 +7,57 @@ const prisma = new PrismaClient();
 
 router.get("/tweets", async (ctx) => {
   const [, token] = ctx.request.headers?.authorization?.split(" ") || [];
-
   if (!token) {
     ctx.status = 401;
     return;
   }
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    jwt.verify(token, process.env.JWT_SECRET);
+    const tweets = await prisma.tweet.findMany({
+      include: {
+        user: true,
+      },
+    });
 
-    ctx.body = tweetCreated;
+    ctx.body = tweets;
   } catch (error) {
-    ctx.status = 401;
+    if (typeof error === "JsonWebTokenError") {
+      ctx.status = 401;
+      return;
+    }
+    ctx.status = 500;
     return;
   }
 
-  const tweets = await prisma.tweet.findMany();
-  ctx.body = tweets;
+  // ctx.body = tweets;
 });
 
 router.post("/tweets", async (ctx) => {
   const [, token] = ctx.request.headers?.authorization?.split(" ") || [];
-
   if (!token) {
     ctx.status = 401;
     return;
   }
+
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    ctx.body = tweetCreated;
+    const tweet = await prisma.tweet.create({
+      data: {
+        userId: payload.sub,
+        message: ctx.request.body.message,
+      },
+    });
+
+    ctx.body = tweet;
   } catch (error) {
-    ctx.status = 401;
+    if (typeof error === "JsonWebTokenError") {
+      ctx.status = 401;
+      return;
+    }
+    ctx.status = 500;
     return;
   }
-  const tweet = {
-    userId: payload.sub,
-    message: ctx.request.body.message,
-  };
-
-  const tweetCreated = await prisma.tweet.create({
-    data: tweet,
-  });
 });
 
 router.post("/signup", async (ctx) => {
@@ -108,7 +118,7 @@ router.get("/login", async (ctx) => {
     ctx.body = "User not found";
     return;
   }
-  const passwordHash = bcryptjs.hashSync(plainTextPassword, saltRound);
+  const passwordHash = bcrypt.hashSync(plainTextPassword, saltRound);
 
   delete user.password;
   if (passwordHash) {
